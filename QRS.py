@@ -8,14 +8,21 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import subprocess
 
 SEPARATOR = "<sep>"  # For separating filename and filesize
-HelpList = ["This is a List of all available commands", "--------------------------------------------------",
-            "[*] This a fully interactive Reverse Shell for Windows CMD so you can use any CMD commands",
-            "[+] There is a complete file download system, Here is how to use it:",
-            "     [*] First Start a file server using 'Start File Server'",
-            "     [*] Then use 'Download <filename>' to automatically download a file from the target machine",
-            "[*] Syntax:", "[+] Start File Server: Starts a file receivment server mandatory for file downloads",
-            "[+] Download <filename>: Downloads a file from the target machine", "[+] Exit: Exits the reverse shell",
-            "[+] Quit: quits QRS", "[+] Help: Shows this message"]
+HelpList = ["This is a List of all available commands", "===================Description====================\n",
+            "QRS a fully interactive Reverse Shell for Windows CMD so you can use any CMD commands",
+            "=====================Commands=====================\n",
+            "Start file server - Starts a file server to receive files from the target machine",
+            "Download <filename> - Downloads a file from the target machine to the local machine into /received_files",
+            "Connections - Shows all active connections and their status",
+            "Connect <client_id> - Connects to a specific client using its ID", 
+            "Clear - Clears the screen",
+            "Clear connections - Clears all connections from the list",
+            "Clear inactive - Clears all inactive connections from the list",
+            "Update - Updates QRS to the latest version from the repository",
+            "Exit - Exits the reverse shell",
+            "Quit - Quits QRS",
+            "Help - Shows this message \n",
+            ]
 
 client_id = 0
 clients = []
@@ -210,7 +217,7 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
 
         # Compare
         if local_commit != remote_commit:
-            print(f"[!] Update available. {local_version} > {remote_version}")
+            print(f"[!] Update available. {local_version} > {remote_version}, use 'update' command to update.")
         else:
             print(f"[✓] You're up to date. Version: {local_version}")
 
@@ -244,8 +251,7 @@ while True:
         break
     if cmd.lower() == "help":
         for i in HelpList:
-            print(i)
-            print("\n")
+            print(i + "\n")
         continue
     if cmd.lower() == "connections":
         if len(clients) == 0:
