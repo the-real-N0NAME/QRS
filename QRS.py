@@ -65,7 +65,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
 # Start HTTP Server in Background
 def start_http_server():
     httpd = HTTPServer(('0.0.0.0', 5000), SimpleHandler)
-    print(f"\n\nPing server started on 0.0.0.0:5000")
+    print(f"\nPing server started on 0.0.0.0:5000\n")
     httpd.serve_forever()
 
 
