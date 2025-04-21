@@ -194,12 +194,18 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
     os.chdir(repo_path)
 
     try:
-        # Fetch latest data from remote
-        subprocess.run(['git', 'fetch'], check=True, stdout=subprocess.DEVNULL)
+        # Fetch remote without printing anything
+        subprocess.run(['git', 'fetch'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
         # Get local and remote commit hashes
-        local_commit = subprocess.check_output(['git', 'rev-parse', branch]).strip()
-        remote_commit = subprocess.check_output(['git', 'rev-parse', f'origin/{branch}']).strip()
+        local_commit = subprocess.check_output(
+            ['git', 'rev-parse', branch],
+            stderr=subprocess.DEVNULL
+        ).strip()
+        remote_commit = subprocess.check_output(
+            ['git', 'rev-parse', f'origin/{branch}'],
+            stderr=subprocess.DEVNULL
+        ).strip()
 
         # Get local version
         local_version = "unknown"
@@ -210,14 +216,15 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
         # Get remote version
         try:
             remote_version = subprocess.check_output(
-                ['git', 'show', f'origin/{branch}:{version_file}']
+                ['git', 'show', f'origin/{branch}:{version_file}'],
+                stderr=subprocess.DEVNULL
             ).decode().strip()
         except subprocess.CalledProcessError:
             remote_version = "unknown"
 
-        # Compare
+        # Show status
         if local_commit != remote_commit:
-            print(f"[!] Update available. {local_version} > {remote_version}, use 'update' command to update.")
+            print(f"[!] Update available. {local_version} > {remote_version}")
         else:
             print(f"[✓] You're up to date. Version: {local_version}")
 
@@ -225,7 +232,6 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
         print(f"[X] Git error: {e}")
     finally:
         os.chdir(original_cwd)
-
 
 
 
