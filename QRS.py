@@ -72,7 +72,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
 # Start HTTP Server in Background
 def start_http_server():
     httpd = HTTPServer(('0.0.0.0', 5000), SimpleHandler)
-    print(f"\nPing server started on 0.0.0.0:5000\n")
+    print(f"\nPing server started on 0.0.0.0:5000")
     httpd.serve_forever()
 
 
@@ -249,6 +249,7 @@ print(f"Welcome to QRS a Python-based reverse shell!")
 print("Type 'help' to see the available commands.")
 print("--------------------------------------------------")
 CheckForUpdates()
+print("\n")
 while True:
     cmd = input(f"{TimeStamp()} $> ")
     if not cmd.strip():
