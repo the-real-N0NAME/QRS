@@ -75,10 +75,16 @@ class SimpleHandler(BaseHTTPRequestHandler):
 
 # Start HTTP Server in Background
 def start_http_server():
+    global httpd
     httpd = HTTPServer(('0.0.0.0', 5000), SimpleHandler)
     print(f"\nPing server started on 0.0.0.0:5000")
     httpd.serve_forever()
-
+def stop_http_server():
+    global httpd
+    if httpd:
+        httpd.shutdown()
+        httpd = None
+        print("[*] Stopped http-ping server")
 
 # Client Class
 class Client:
@@ -128,6 +134,8 @@ def FormatTime(seconds):
 
 # Server for File Download
 def StartServer(host='127.0.0.1', port=5005, output_folder='received_files'):
+    global server_running
+    server_running = True
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
     server_socket.listen(5)
@@ -136,7 +144,7 @@ def StartServer(host='127.0.0.1', port=5005, output_folder='received_files'):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    while True:
+    while server_running:
         client_socket, client_address = server_socket.accept()
         print(f"[+] Connection from {client_address} has been established.")
 
@@ -179,9 +187,14 @@ def StartServer(host='127.0.0.1', port=5005, output_folder='received_files'):
 
 # Support
 def start_file_server_in_thread():
+    global file_server
     server_thread = threading.Thread(target=StartServer, args=(SERVER_HOST, 5005), daemon=True)
     server_thread.start()
     print(f"{TimeStamp()} File Server is active on {SERVER_HOST}:5005")
+def stop_file_server():
+    global server_running
+    server_running = False
+    print("[*] Stopping file-server...")
 
 def RemoveInactiveClients():
     global clients
@@ -238,6 +251,12 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
         os.chdir(original_cwd)
 
 
+def StopServices():
+    print(f"\n[*] Stopping services...")
+    stop_http_server()
+    stop_file_server()
+    print(f"{TimeStamp()} services stopped.")
+
 
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5003
@@ -276,6 +295,7 @@ while True:
         try:
             subprocess.run("git pull https://github.com/the-real-N0NAME/QRS.git", shell=True, check=True)
             print(f"{TimeStamp()} QRS updated successfully. Restarting...")
+            StopServices()
             subprocess.run("python QRS.py", shell=True, check=True)
             exit(0)
         except subprocess.CalledProcessError as e:
@@ -283,7 +303,7 @@ while True:
     if cmd.lower() == "quit":
         print(f"{TimeStamp()} Quitting QRS...")
         exit(0)
-    
+
     SplitedCMD = cmd.split()
     if SplitedCMD[0].lower() == "clear":
         if len(SplitedCMD) < 2:
