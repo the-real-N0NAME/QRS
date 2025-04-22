@@ -296,6 +296,9 @@ while True:
             subprocess.run("git pull https://github.com/the-real-N0NAME/QRS.git", shell=True, check=True)
             print(f"{TimeStamp()} QRS updated successfully. Restarting...")
             StopServices()
+            print(f"{TimeStamp()} Restarting QRS in 3 sec...")
+            time.sleep(3)
+            os.system("cls" if os.name == "nt" else "clear")
             subprocess.run("python QRS.py", shell=True, check=True)
             exit(0)
         except subprocess.CalledProcessError as e:
