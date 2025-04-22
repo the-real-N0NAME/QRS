@@ -10,7 +10,7 @@ GlobalOverwriteOutput = None
 
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 5003
-BUFFER_SIZE = 4 * 1024 * 1024 # 4mb max size of messages, feel free to increase
+BUFFER_SIZE = 1024 * 1024 # 1mb max size for commands, feel free to increase
 SEPARATOR = "<sep>"
 def RunCommand(command):
     # Should be error prove command running function
