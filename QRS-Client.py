@@ -193,7 +193,7 @@ def EstablishConnection():
 
 def Ping():
     try:
-        conn = http.client.HTTPConnection("127.0.0.1", 5000)
+        conn = http.client.HTTPConnection(SERVER_HOST, 5000)
         conn.request("GET", "/?msg=ping")
         response = conn.getresponse()
         conn.close()

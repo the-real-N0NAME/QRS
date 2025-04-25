@@ -6,6 +6,7 @@ import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import subprocess
+import tabulate
 
 SEPARATOR = "<sep>"  # For separating filename and filesize
 HelpList = ["This is a List of all available commands", "===================Description====================\n",
@@ -118,7 +119,6 @@ class Client:
             return f"Client ID : {self.client_id} : ACTIVE for {connection_duration:.2f} sec [Address: {self.client_address}, Connected at: {connection_time_str} ({FormatTime(connection_duration)} ago)]"
         else:
             return f"Client ID : {self.client_id} : INACTIVE for {last_connection_duration:.2f} sec [Address: {self.client_address}, Connected at: {connection_time_str} ({FormatTime(last_connection_duration)} ago), last active at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.last_active_time))} ({FormatTime(connection_duration - last_connection_duration)} ago)]"
-
 # Formating
 def TimeStamp():
     return f"[{time.strftime('%H:%M:%S', time.localtime())}]"
@@ -195,6 +195,22 @@ def stop_file_server():
     global server_running
     server_running = False
     print("[*] Stopping file-server...")
+
+
+def __str__(clients):
+    if len(clients) == 0:
+        print(f"{TimeStamp()} No connections found.")
+    else:
+        print(f"{TimeStamp()} Found {len(clients)} connection(s):")
+        table = []
+        for client in clients:
+            connection_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(client.connection_time))
+            if client.GetStatus() == "ACTIVE":
+                table.append([client.client_id, client.client_address[0], client.client_address[1], client.GetStatus(), f"{connection_time_str} ({FormatTime(client.get_connection_duration())} ago)", "N/A"])
+            else:
+                table.append([client.client_id, client.client_address[0], client.client_address[1], client.GetStatus(), f"{connection_time_str} ({FormatTime(client.get_connection_duration())} ago)", f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(client.last_active_time))} ({FormatTime(client.get_connection_duration() - client.get_last_connection_duration())} ago)"])
+        print(f"\n{tabulate.tabulate(table, headers=["Client ID", "IP Address", "Port", "Status", "Connected At", "Last active at"], tablefmt="presto")}\n")
+
 
 def RemoveInactiveClients():
     global clients
@@ -284,12 +300,8 @@ while True:
             print(i + "\n")
         continue
     if cmd.lower() == "connections":
-        if len(clients) == 0:
-            print(f"{TimeStamp()} No connections found.")
-        else:
-            print(f"{TimeStamp()} Found {len(clients)} connection(s):")
-            for client in clients:
-                print(f"[+] {client.__str__()}")
+        __str__(clients)
+        continue
     if cmd.lower() == "update":
         print(f"{TimeStamp()} Updating QRS...")
         try:
