@@ -7,6 +7,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import subprocess
 import tabulate
+import random
 
 SEPARATOR = "<sep>"  # For separating filename and filesize
 HelpList = ["This is a List of all available commands", "===================Description====================\n",
@@ -281,6 +282,15 @@ BUFFER_SIZE = 5 * 1024 * 1024  # 5MB for ouput buffer size, feel free to increas
 # Start HTTP Server in the Background
 http_server_thread = threading.Thread(target=start_http_server, daemon=True)
 http_server_thread.start()
+
+# Banner
+banners = os.listdir("./banners")
+if len(banners) > 0:
+    with open(f"./banners/{random.choice(banners)}", "r", encoding="utf-8") as f:
+        print(f.read())
+else:
+    print("[!] Failed to load banner.")
+
 
 # Welcome Message
 print(f"QRS Started on {SERVER_HOST}:{SERVER_PORT} at {TimeStamp()}")
