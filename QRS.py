@@ -13,6 +13,7 @@ from urllib.request import urlopen
 import folium
 import webbrowser
 import re as r
+from colorama import init, Fore, Back, Style
 
 SEPARATOR = "<sep>"  # For separating filename and filesize
 HelpList = ["This is a List of all available commands", "===================Description====================\n",
@@ -184,6 +185,72 @@ def MapConnections(connections):
 
     map_object.save("clients_map.html")
     print("[*] Map saved as clients_map.html")
+
+init()
+
+with open("WorldMap.txt", "r") as file:
+    world_map = file.read()
+
+
+def MapConnectionsCMD(map_data, connections):
+    locations = []
+    for connection in connections:
+        ip = connection.client_address[0]
+        if ip != "127.0.0.1" and ip != "0.0.0.0":
+            pass
+        else:
+            ip = str(getIP())
+
+        try:
+            response = requests.get(f'https://ipwho.is/{ip}', timeout=5)
+            data = response.json()
+            if not data.get("success"):
+                print(f"[!] Failed to locate IP: {ip}")
+                continue
+            else:
+                print(f"[+] Client ID: {connection.client_id} - IP {ip} - City: {data["city"]}")
+            locations.append((data["latitude"], data["longitude"], connection.client_id))
+        except Exception as e:
+            print(f"[!] Error fetching location for IP {ip}: {e}")
+            continue
+    # Create a grid to represent the map
+    grid = [[' ' for _ in range(80)] for _ in range(24)]
+    
+    lines = map_data.splitlines()
+    for y in range(min(24, len(lines))):  # Prevent too many lines
+        line = lines[y]
+        if y == len(lines) // 2:
+            for x in range(len(line)):
+                if x == len(line) //2:
+                    grid[y][x] = '+'
+                else:
+                    grid[y][x] = '-'
+        else:
+            for x in range(min(80, len(line))):  # Prevent too wide lines
+                if x == len(line) // 2:
+                    grid[y][x] =  '|'
+                else:
+                    char = line[x]
+                    grid[y][x] = Fore.GREEN + char
+
+
+    # Mark the locations on the map
+    for loc in locations:
+        latitude, longitude, ClientID = loc
+        x = int((longitude + 180) * (80 / 360))  # Longitude: -180 to +180 mapped to 0 to 80
+        y = int((90 - latitude) * (24 / 180))    # Latitude: +90 (top) to -90 (bottom)
+        print(f"Location: {loc}, {ClientID} -> Grid: ({x}, {y})")
+        if 0 <= x < 80 and 0 <= y < 24:
+            grid[y][x] = Fore.RED + f'{ClientID}'
+        else:
+            print(f"Location {loc} is out of bounds for the map.")
+
+    # Print the map
+    for row in grid:
+        for char in row:
+            print(''.join(char) + Style.RESET_ALL, end='')
+        print("\n", end='')
+
 
 # Formating
 def TimeStamp():
@@ -411,13 +478,18 @@ while True:
             RemoveInactiveClients()
     if SplitedCMD[0].lower() == "map":
         if SplitedCMD[1].lower() == "connections":
-            print(f"{TimeStamp()} Mapping connections...")
-            MapConnections(clients)
-            try:
-                webbrowser.open('clients_map.html')
-                print("[*] Map opened in web browser.")
-            except FileNotFoundError:
-                print("[!] Map file not found.")
+            if SplitedCMD[2].lower() == "-cmd":
+                print(f"{TimeStamp()} Mapping connections in command line...")
+                MapConnectionsCMD(world_map, clients)
+                __str__(clients)
+            else:
+                print(f"{TimeStamp()} Mapping connections...")
+                MapConnections(clients)
+                try:
+                    webbrowser.open('clients_map.html')
+                    print("[*] Map opened in web browser.")
+                except FileNotFoundError:
+                    print("[!] Map file not found.")
     if SplitedCMD[0].lower() == "connect":
         local_client_ID = int(SplitedCMD[1])
         if local_client_ID >= len(clients) or local_client_ID < 0:
