@@ -254,6 +254,9 @@ def FormatTime(seconds):
         return time.strftime('%Dd, %Hh, %Mm, %Ss', time.gmtime(seconds))
     else:
         return time.strftime('%Ss', time.gmtime(seconds))
+def get_public_ip():
+    return requests.get("https://api.ipify.org").text
+
 
 # Server for File hosting
 
@@ -282,8 +285,16 @@ def run_file_server(filename, port=5006):
         def log_message(self, format, *args):
             return
 
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = "127.0.0.1"
+
     httpd = socketserver.TCPServer(("", port), OneFileHandler)
-    print(f"[✓] Hosting '{filename}' at http://localhost:{port}/ (auto-download)")
+    print(f"[✓] Hosting '{filename}' at http://{local_ip}:{port}/ (auto-download)")
     
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -533,6 +544,12 @@ def cmd_help():
             for n, t in [arg[:2]]
         )        
         print(f"  {name} {arg_list} — {info['description']}")
+
+@command("origin",description="Shows the IP:Port of the server")
+def cmd_origin():
+    print(f"Server is running on {get_public_ip()}:{SERVER_PORT}")
+    print(f"Note this IP can only be accessed from devices outside your local network.")
+
 @command("update", description="Update QRS to the latest version")
 def cmd_update():
     print(f"{TimeStamp()} Updating QRS...")
